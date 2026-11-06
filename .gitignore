@@ -1,0 +1,31 @@
+# Local synchronization bundle
+_sync.tar.gz
+
+# Python caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Temporary DOCX extraction and report scratch directories
+tasks/_d3/
+tasks/_probe_*/
+
+# Virtual environments and local configuration
+.venv/
+venv/
+.env
+.env.*
+
+# Logs and editor/OS files
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

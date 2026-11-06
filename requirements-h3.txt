@@ -1,0 +1,30 @@
+# MiniMax-H3 端到端运行依赖（Hygon DCU / DTK 26.04 实测可组合）
+#
+# 这是一组经过实测的版本约束。H3 的依赖存在三元死锁：
+#   - diffusers >= 0.41 需要 huggingface_hub 的 resolve_revision（hf-hub 1.x）
+#   - transformers 4.x 要求 hf-hub < 1.0
+#   - transformers 5.x 要求 torch >= 2.6
+#   - 平台固定 torch 2.5.1
+# 因此唯一可行组合是 diffusers 0.40 + transformers 4.57 + hf-hub 0.36。
+#
+# 安装方式（集群 PyPI 直连不稳定，建议下载 wheel 后本地解压到 site-packages）：
+#   pip install --no-deps <wheel>
+
+diffusers==0.40.0
+transformers==4.57.1
+safetensors>=0.4.0
+tokenizers>=0.20.0
+accelerate>=0.33.0
+huggingface_hub==0.36.0
+
+# 九齿（源码安装，需 Gitee 镜像）
+#   pip install -e ~/Projects/ninetoothed
+
+# InfiniLM 运行时补充
+janus
+xxhash
+
+# 说明：torch / triton / numpy 由平台 conda 环境提供，不要覆盖。
+#   torch       2.5.1+das.opt1.dtk25042
+#   triton      3.1.0（海光定制 triton-3.0.0+das.opt4.dtk2504）
+#   numpy       1.25.0
