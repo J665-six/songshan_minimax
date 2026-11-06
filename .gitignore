@@ -1,36 +1,96 @@
-# Xmake cache
+# Build and packaging output
 .xmake/
 build/
-python/infinilm/lib/*.so
-
-# MacOS Cache
-.DS_Store
-
-# Vscode
-.vscode/
-
-*.sh
-model_weight/
-
-# Python
-__pycache__/
+dist/
+.eggs/
 *.egg-info/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.orig
+*.rej
 
-# Log
-*.log
+# Compiled binaries and object files
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.pyd
+*.exe
+*.out
+*.d
+*.mod
+*.smod
 
-# Cache
+# Native build and profiling artifacts
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+perf.data*
+*.nsys-rep
+*.ncu-rep
+
+# Python runtime and test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+test-results/
+junit*.xml
+/benchmark-results/
+/results*.csv
+
+# Virtual environments and local configuration
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
 .cache/
 
-# JSON
-*.json
-
-#GGUF
+# Model weights and exported models
+model_weight/
+/models/
 *.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
 
-# txt
-*.txt
-
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
 *.http
 
-*.nsys-rep
+# IDE and operating-system files
+.vscode/
+.idea/
+.fleet/
+.DS_Store
+Thumbs.db
+Desktop.ini
