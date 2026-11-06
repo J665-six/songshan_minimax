@@ -1,4 +1,9 @@
-add_requires("pybind11")
+local pybind11_include = os.getenv("INFINILM_PYBIND11_INCLUDE")
+local python_include = os.getenv("INFINILM_PYTHON_INCLUDE")
+
+if not pybind11_include then
+    add_requires("pybind11")
+end
 
 set_toolchains("gcc")
 
@@ -22,7 +27,14 @@ add_includedirs("third_party/spdlog/include")
 add_includedirs("third_party/json/single_include/")
 
 target("_infinilm")
-    add_packages("pybind11")
+    if pybind11_include then
+        add_includedirs(pybind11_include, { public = true })
+    else
+        add_packages("pybind11")
+    end
+    if python_include then
+        add_includedirs(python_include, { public = true })
+    end
     set_default(false)
     add_rules("python.module", {soabi = true})
     set_languages("cxx17")

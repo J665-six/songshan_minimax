@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import weakref
 from dataclasses import dataclass, fields
 from pathlib import Path
 from types import SimpleNamespace
@@ -435,6 +436,9 @@ class MiniMaxH3TransformerRunner:
             distributed_config = DistConfig(tp_size=tp_size)
 
         self.device = infinicore.device(_runtime_device_type(device), device_id)
+        self._text_cache_source_ref: weakref.ReferenceType[torch.Tensor] | None = None
+        self._static_torch_inputs: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._static_native_inputs: tuple[infinicore.Tensor, infinicore.Tensor] | None = None
         self.engine = InferEngine(
             str(self.transformer_path),
             device=self.device,
@@ -471,23 +475,45 @@ class MiniMaxH3TransformerRunner:
         return_torch: bool = True,
     ) -> MiniMaxH3TransformerOutput:
         inputs.validate()
+        text_source = inputs.encoder_hidden_states
+        cached_source = (
+            self._text_cache_source_ref()
+            if self._text_cache_source_ref is not None
+            else None
+        )
+        new_generation = cached_source is not text_source
+        if new_generation:
+            # A new prompt embedding invalidates both native text and static
+            # layout caches.
+            self.engine.reset_cache(None)
+            self._text_cache_source_ref = weakref.ref(text_source)
+            self._static_torch_inputs = (
+                minimax_h3_rotary_cache(
+                    inputs.position_ids,
+                    rope_freq_dim=self.rope_freq_dim,
+                    rope_theta=self.rope_theta,
+                    dtype=infinicore.utils.to_torch_dtype(self.engine.dtype),
+                ),
+                torch.arange(
+                    inputs.position_ids.shape[0],
+                    dtype=torch.int64,
+                    device=inputs.position_ids.device,
+                ),
+            )
+            self._static_native_inputs = tuple(
+                self._to_infinicore(tensor) for tensor in self._static_torch_inputs
+            )
+        if self._static_native_inputs is None:
+            raise RuntimeError("MiniMax-H3 static input cache was not initialized")
         torch_inputs = {
             field.name: getattr(inputs, field.name) for field in fields(inputs)
         }
-        torch_inputs["rotary_cos_sin_cache"] = minimax_h3_rotary_cache(
-            inputs.position_ids,
-            rope_freq_dim=self.rope_freq_dim,
-            rope_theta=self.rope_theta,
-            dtype=infinicore.utils.to_torch_dtype(self.engine.dtype),
-        )
-        torch_inputs["position_ids"] = torch.arange(
-            inputs.position_ids.shape[0],
-            dtype=torch.int64,
-            device=inputs.position_ids.device,
-        )
         native_inputs = {
             name: self._to_infinicore(tensor) for name, tensor in torch_inputs.items()
         }
+        native_inputs["rotary_cos_sin_cache"], native_inputs["position_ids"] = (
+            self._static_native_inputs
+        )
         output = self.engine.forward_raw(None, **native_inputs)
         video = output["logits"]
         audio = output["hidden_states"]

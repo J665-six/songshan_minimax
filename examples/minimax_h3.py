@@ -25,6 +25,10 @@ from diffusers.modular_pipelines.minimax_h3 import (
 )
 from diffusers.utils import load_image
 from diffusers.utils.export_utils import encode_video
+from infinilm.multimodal.audio_kernels import (
+    install_ninetoothed_audio_kernels,
+    materialize_audio_weight_norm,
+)
 from infinilm.multimodal.minimax_h3 import (
     MiniMaxH3ConditionEncoder,
     MiniMaxH3DiffusersAdapter,
@@ -510,10 +514,32 @@ def load_pipeline(
         )
         execution_device = pipe._execution_device
         print(f"[model] Diffusers execution device: {execution_device}")
-        pipe.vae.to(device=execution_device, dtype=DTYPE)
-        pipe.audio_vae.to(device=execution_device, dtype=DTYPE)
+        # load_components already applied DTYPE while honoring each VAE's
+        # _keep_in_fp32_modules. A second dtype cast here would downcast the
+        # video encoder and the entire audio codec, changing decoded output.
+        pipe.vae.to(device=execution_device)
+        pipe.audio_vae.to(device=execution_device)
         pipe.vae.requires_grad_(False)
         pipe.audio_vae.requires_grad_(False)
+        pipe.vae.eval()
+        pipe.audio_vae.eval()
+
+        protected_modules = {
+            "vae.encoder": pipe.vae.encoder,
+            "audio_vae.decoder": pipe.audio_vae.decoder,
+            "audio_vae.pre_block": pipe.audio_vae.pre_block,
+            "audio_vae.dec_in_proj": pipe.audio_vae.dec_in_proj,
+        }
+        for name, module in protected_modules.items():
+            dtypes = {parameter.dtype for parameter in module.parameters()}
+            if not dtypes.issubset({torch.float32}):
+                raise RuntimeError(
+                    f"{name} must remain float32 for reference parity, got {dtypes}"
+                )
+        materialized_norms = materialize_audio_weight_norm(pipe.audio_vae)
+        installed_kernels = install_ninetoothed_audio_kernels(pipe.audio_vae)
+        print(f"[model] Materialized audio weight norms: {materialized_norms}")
+        print(f"[model] NineToothed audio SnakeBeta kernels: {installed_kernels}")
     return pipe, text_encoder, transformer
 
 
@@ -674,6 +700,52 @@ def prepare_generation_inputs(
     return paths, generation_kwargs, prepared
 
 
+def validate_generation_output(result: dict[str, Any], num_frames: int) -> None:
+    """Fail before media encoding if decoded output violates H3's contract."""
+
+    videos = result.get("videos")
+    video_shape = tuple(getattr(videos, "shape", ()))
+    if len(video_shape) == 5 and video_shape[0] == 1:
+        video_shape = video_shape[1:]
+    if len(video_shape) != 4:
+        raise RuntimeError(
+            f"Generated video must be [frames, height, width, 3], got {video_shape}"
+        )
+    frames, height, width, channels = video_shape
+    if frames != num_frames:
+        raise RuntimeError(
+            f"Generated video has {frames} frames, expected {num_frames}"
+        )
+    if channels != 3 or height <= 0 or width <= 0:
+        raise RuntimeError(
+            f"Generated video has invalid RGB geometry {video_shape}"
+        )
+    if height % 32 or width % 32:
+        raise RuntimeError(
+            f"Generated video geometry must be divisible by 32, got {height}x{width}"
+        )
+
+    audio = result.get("audio")
+    audio_shape = tuple(getattr(audio, "shape", ()))
+    if len(audio_shape) == 3 and audio_shape[0] == 1:
+        audio_shape = audio_shape[1:]
+    if len(audio_shape) != 2 or audio_shape[0] != 2 or audio_shape[1] <= 0:
+        raise RuntimeError(
+            f"Generated audio must be [2, samples], got {audio_shape}"
+        )
+    if int(result.get("sampling_rate", 0)) != 32_000:
+        raise RuntimeError(
+            f"Generated audio sample rate is {result.get('sampling_rate')}, expected 32000"
+        )
+
+    expected_samples = num_frames / FPS * 32_000
+    if abs(audio_shape[1] - expected_samples) > 32_000 // 20:
+        raise RuntimeError(
+            "Generated audio duration differs from the video by more than 50 ms: "
+            f"{audio_shape[1]} samples vs {expected_samples:.0f}"
+        )
+
+
 def print_generation_summary(
     args: argparse.Namespace,
     prepared: dict[str, Any],
@@ -729,6 +801,7 @@ def main() -> None:
             timings.measure("generation.pipeline_total", synchronize=True),
         ):
             result = pipe(**generation_kwargs)
+            validate_generation_output(result, prepared["num_frames"])
     finally:
         profiler.close()
 

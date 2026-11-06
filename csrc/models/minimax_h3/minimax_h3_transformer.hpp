@@ -193,6 +193,8 @@ public:
 private:
     size_t hidden_size_;
     infinicore::DataType dtype_;
+    mutable std::optional<infinicore::Tensor> cached_text_embeddings_;
+    mutable const void *cached_text_source_{nullptr};
 
     INFINICORE_NN_MODULE(infinilm::layers::linear::ReplicatedLinear, proj_in);
     INFINICORE_NN_MODULE(infinilm::layers::linear::ReplicatedLinear, audio_proj_in);
