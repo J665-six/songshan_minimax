@@ -20,17 +20,11 @@
 #### 二、编译并安装  `InfiniLM`
   - 克隆项目
 
-    由于仓库中含有子模块，所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
-
     ```shell
-    git clone --recursive https://github.com/InfiniTensor/InfiniLM.git
+    git clone https://github.com/J665-six/songshan_minimax.git
     ```
 
-    或者在普通克隆后进行更新：
-
-    ```shell
-    git submodule update --init --recursive
-    ```
+    `json` 和 `spdlog` 的构建头文件已经随仓库提供，不需要初始化子模块。
 
   - 安装 InfiniLM Python 包
     ```bash
@@ -44,6 +38,28 @@
     export INFINILM_CXX11_ABI=0
     pip install -e .
     ```
+
+    如果 pybind11 或 Python 头文件由集群环境提供，而不是由 xmake 自动安装，
+    可以显式指定路径：
+
+    ```bash
+    export INFINILM_PYBIND11_INCLUDE=/path/to/pybind11/include
+    export INFINILM_PYTHON_INCLUDE=/path/to/python/include/python3.10
+    ```
+
+  - MiniMax H3 额外依赖
+
+    MiniMax H3 示例使用 Diffusers 的模块化管线、Qwen3-VL、Accelerate
+    和 NineToothed。它们不随 InfiniLM 仓库提供，需要安装在同一个 Python
+    环境中。NineToothed 音频内核由 InfiniCore 的 Python 包导出：
+
+    ```bash
+    pip install accelerate diffusers safetensors transformers
+    python -c "from infinicore.nn.functional import snake_beta_ninetoothed"
+    ```
+
+    最后一条命令必须成功；如果失败，说明 InfiniCore Python 包没有正确安装，
+    需要先按上面的步骤编译并安装 InfiniCore。
 
   - 单次推理测试
     - llama示例
